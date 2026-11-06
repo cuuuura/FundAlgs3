@@ -80,13 +80,13 @@ status_t convert_to_base_2r(int num, int r, const char *digits, char **out_str) 
     while (u_num != 0) {
         unsigned int digit = u_num & mask;
         *ptr = digits[digit];
-        ptr = (char *)bitwise_add_one_ptr(ptr);
+        ptr = (char *)bitwise_add_one_ptr((uintptr_t)ptr);
         u_num = u_num >> r;
     }
 
     if (is_negative) {
         *ptr = '-';
-        ptr = (char *)bitwise_add_one_ptr(ptr);
+        ptr = (char *)bitwise_add_one_ptr((uintptr_t)ptr);
     }
     *ptr = '\0';
 
