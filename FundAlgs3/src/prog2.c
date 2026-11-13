@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
 typedef enum {
     SUCCESS = 0,
@@ -124,17 +125,20 @@ int main(void) {
 
     for (int i = 0; i < n; i++) {
         int h1, m1, h2, m2;
-        unsigned int id;
+        long long temp_id;
         
-        if (scanf("%u %d:%d %d:%d", &id, &h1, &m1, &h2, &m2) != 5) {
+        if (scanf("%lld %d:%d %d:%d", &temp_id, &h1, &m1, &h2, &m2) != 5) {
             st = ERR_INVALID_FORMAT;
             break;
         }
         
-        if (id == 0) {
+        if (temp_id <= 0 || temp_id > UINT_MAX) {
             st = ERR_INVALID_FORMAT;
             break;
         }
+
+        unsigned int id = (unsigned int)temp_id;
+
 
         if (h1 < 0 || h1 > 23 || m1 < 0 || m1 > 59 || h2 < 0 || h2 > 23 || m2 < 0 || m2 > 59) {
             st = ERR_INVALID_FORMAT;

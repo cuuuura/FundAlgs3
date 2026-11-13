@@ -51,6 +51,10 @@ static uintptr_t bitwise_sub_one_ptr(uintptr_t x) {
     return x;
 }
 
+static unsigned int bitwise_negate(unsigned int x) {
+    return bitwise_add_one(~x);
+}
+
 status_t convert_to_base_2r(int num, int r, const char *digits, char **out_str) {
     if (out_str == NULL || digits == NULL) return ERR_INVALID_ARGUMENTS;
     if (r < 1 || r > 5) return ERR_INVALID_R;
@@ -73,7 +77,7 @@ status_t convert_to_base_2r(int num, int r, const char *digits, char **out_str) 
         u_num = bitwise_add_one(u_num);
     }
 
-    unsigned int mask = ~(~0U << r); 
+    unsigned int mask = ~(bitwise_negate(1U << r));
     
     char *ptr = buf;
 
@@ -121,7 +125,7 @@ int main(void) {
             status_t st = convert_to_base_2r(num, r, digits, &res);
             
             if (st == SUCCESS) {
-                printf("Number %d in base 2^%d: %s\n", num, r, res);
+                printf("Number   d in base 2^%d: %s\n", num, r, res);
                 free(res);
             } else {
                 printf("Error: %s\n", status_msg(st));
