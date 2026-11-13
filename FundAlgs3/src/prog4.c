@@ -144,10 +144,11 @@ typedef struct {
 
 typedef struct {
     Address address;
-    double weight;       
-    String id;           
+    double weight;
+    String id;
     String creation_time;
     String delivery_time;
+    String actual_delivery_time;
 } Mail;
 
 typedef struct {
@@ -263,9 +264,48 @@ static void mail_clear(Mail *m) {
     string_clear(&m->id);
     string_clear(&m->creation_time);
     string_clear(&m->delivery_time);
+    string_clear(&m->actual_delivery_time);
     address_clear(&m->address);
     
     m->weight = 0.0;
+}
+
+static status_t format_time(time_t t, String *out) {
+    if (out == NULL) return ERR_NULL;
+    if (out->data != NULL) return ERR_VALUE;       /* поле должно быть пустым */
+    struct tm *lt = localtime(&t);
+    if (lt == NULL) return ERR_VALUE;
+    char *buf = malloc(20);                        /* 19 + '\0', в куче */
+    if (buf == NULL) return ERR_MEMORY;
+    if (strftime(buf, 20, "%d:%m:%Y %H:%M:%S", lt) != 19) {
+        free(buf);
+        return ERR_VALUE;
+    }
+    out->data = buf;
+    out->length = 19;
+    return SUCCESS;
+}
+
+static status_t mail_status(const Mail *m, int *out) {
+    if (m == NULL || out == NULL) return ERR_NULL;
+    if (m->actual_delivery_time.length == 0) { *out = 0; return SUCCESS; }
+    time_t plan = 0, fact = 0;
+    status_t st = parse_time(m->delivery_time.data, &plan);
+    if (st == SUCCESS) st = parse_time(m->actual_delivery_time.data, &fact);
+    if (st != SUCCESS) return st;
+    *out = (fact <= plan) ? 1 : 2;
+    return SUCCESS;
+}
+
+static status_t mail_matches(const Mail *m, int expired, time_t now, int *take) {
+    if (m == NULL || take == NULL) return ERR_NULL;
+    if (!expired) { *take = (m->actual_delivery_time.length > 0); return SUCCESS; }
+    if (m->actual_delivery_time.length > 0) { *take = 0; return SUCCESS; }  /* вручена — не просрочена */
+    time_t plan = 0;
+    status_t st = parse_time(m->delivery_time.data, &plan);
+    if (st != SUCCESS) return st;
+    *take = (plan < now);
+    return SUCCESS;
 }
 
 // функции для меню
@@ -332,9 +372,27 @@ static status_t post_find_mail(const Post *post, const char *id, const Mail **ou
     return ERR_NOT_FOUND;
 }
 
+static status_t post_deliver_mail(Post *post, const char *id) {
+    if (post == NULL || id == NULL) return ERR_NULL;
+
+    for (size_t i = 0; i < post->count; i++) {
+        if (strcmp(post->mails[i].id.data, id) != 0) continue;
+
+        Mail *m = &post->mails[i];
+        if (m->actual_delivery_time.length > 0) return ERR_VALUE;   
+        time_t now = time(NULL);
+        if (now == (time_t)-1) return ERR_VALUE;
+        time_t created = 0;
+        status_t st = parse_time(m->creation_time.data, &created);
+        if (st != SUCCESS) return st;
+        if (now < created) return ERR_VALUE;
+        return format_time(now, &m->actual_delivery_time);
+    }
+    return ERR_NOT_FOUND;
+}
+
 static status_t post_select(const Post *post, int expired, const Mail ***out_list, size_t *out_count) {
     if (post == NULL || out_list == NULL || out_count == NULL) return ERR_NULL;
-    
     *out_list = NULL;
     *out_count = 0;
     time_t now = time(NULL);
@@ -342,26 +400,28 @@ static status_t post_select(const Post *post, int expired, const Mail ***out_lis
 
     size_t n = 0;
     for (size_t i = 0; i < post->count; i++) {
-        time_t td = 0;
-        status_t st = parse_time(post->mails[i].delivery_time.data, &td);
+        int take = 0;
+        status_t st = mail_matches(&post->mails[i], expired, now, &take);
         if (st != SUCCESS) return st;
-        if (expired ? (td < now) : (td <= now)) n++;
+        if (take) n++;
     }
     if (n == 0) return SUCCESS;
 
     const Mail **list = malloc(n * sizeof *list);
     if (list == NULL) return ERR_MEMORY;
 
-    size_t k = 0;                                    /* проход 2: сразу по местам */
+    size_t k = 0;
     for (size_t i = 0; i < post->count; i++) {
-        time_t td = 0, tc = 0;
-        status_t st = parse_time(post->mails[i].delivery_time.data, &td);
+        const Mail *m = &post->mails[i];
+        int take = 0;
+        status_t st = mail_matches(m, expired, now, &take);
         if (st != SUCCESS) { free(list); return st; }
-        if (!(expired ? (td < now) : (td <= now))) continue;
-        st = parse_time(post->mails[i].creation_time.data, &tc);
-        if (st != SUCCESS) { free(list); return st; }
+        if (!take) continue;
 
-        size_t pos = k;                              /* вставка по времени создания */
+        time_t tc = 0;
+        st = parse_time(m->creation_time.data, &tc);
+        if (st != SUCCESS) { free(list); return st; }
+        size_t pos = k;                       /* вставка по времени создания */
         while (pos > 0) {
             time_t tp = 0;
             st = parse_time(list[pos - 1]->creation_time.data, &tp);
@@ -370,7 +430,7 @@ static status_t post_select(const Post *post, int expired, const Mail ***out_lis
             list[pos] = list[pos - 1];
             pos--;
         }
-        list[pos] = &post->mails[i];
+        list[pos] = m;
         k++;
     }
     *out_list = list;
@@ -506,12 +566,18 @@ static status_t input_mail(Mail *m) {
 }
 
 static void print_mail(const Mail *m) {
+    int stt = 0;
+    const char *label = "не вручена";
+    if (mail_status(m, &stt) == SUCCESS)
+        label = (stt == 1) ? "вручена вовремя" : (stt == 2) ? "вручена с задержкой" : "не вручена";
     printf("  ID: %s\n  Индекс: %s\n  Адрес: г. %s, ул. %s, д. %u, корп. '%s', кв. %u\n"
-           "  Вес: %.3f\n  Создано: %s\n  Вручение: %s\n",
+           "  Вес: %.3f\n  Создано: %s\n  Срок вручения: %s\n  Факт вручения: %s\n  Статус: %s\n",
            m->id.data, m->address.index.data,
            m->address.city.data, m->address.street.data, m->address.house,
            m->address.building.data, m->address.apartment,
-           m->weight, m->creation_time.data, m->delivery_time.data);
+           m->weight, m->creation_time.data, m->delivery_time.data,
+           m->actual_delivery_time.length > 0 ? m->actual_delivery_time.data : "—",
+           label);
 }
 
 static void print_menu(void) {
@@ -522,6 +588,7 @@ static void print_menu(void) {
            "4. Показать доставленные (по времени создания)\n"
            "5. Показать с истёкшим сроком доставки (по времени создания)\n"
            "6. Показать все (всегда отсортированы: индекс, затем ID)\n"
+           "7. Отметить вручение по ID\n"
            "0. Выход\n"
            "Выберите действие: ");
     fflush(stdout);
@@ -615,11 +682,16 @@ int main(void) {
                 size_t n = 0;
                 st = post_select(&post, choice == 5, &list, &n);
                 if (st == SUCCESS) {
+                    /* case 4/5, внутри if (st == SUCCESS): */
                     printf(choice == 5 ? "С истёкшим сроком доставки:\n" : "Доставленные:\n");
-                    for (size_t i = 0; i < n; i++)
-                        printf("%s | индекс %s | создано %s | вручение %s\n",
-                               list[i]->id.data, list[i]->address.index.data,
-                               list[i]->creation_time.data, list[i]->delivery_time.data);
+                    for (size_t i = 0; i < n; i++) {
+                        const Mail *m = list[i];
+                        int stt = 0;
+                        const char *label = "";
+                        if (choice == 4 && mail_status(m, &stt) == SUCCESS)
+                            label = (stt == 2) ? " [задержка]" : " [вовремя]";
+                        printf("%s | индекс %s | создано %s | срок %s | факт %s%s\n", m->id.data, m->address.index.data, m->creation_time.data, m->delivery_time.data, m->actual_delivery_time.length > 0 ? m->actual_delivery_time.data : "—", label);
+                    }
                     if (n == 0) printf("Нет отправлений\n");
                     free(list);
                 } else {
@@ -634,6 +706,24 @@ int main(void) {
                            post.mails[i].id.data, post.mails[i].address.index.data,
                            post.mails[i].creation_time.data, post.mails[i].delivery_time.data);
                 break;
+            case 7: {
+                String id = {0};
+                st = read_field("ID для вручения (14 цифр): ", &id);
+                if (st == SUCCESS) {
+                    if (validate_digits(&id, 14) != SUCCESS) {
+                        printf("Ошибка: ID — ровно 14 цифр\n");
+                        st = ERR_VALUE;
+                    } else {
+                        st = post_deliver_mail(&post, id.data);
+                    }
+                }
+                if (st == SUCCESS) printf("Вручение отмечено\n");
+                else if (st == ERR_NOT_FOUND) printf("Посылка не найдена\n");
+                else if (st == ERR_VALUE) printf("Уже вручена или вручение невозможно\n");
+                else if (st == ERR_EOF) running = 0;
+                string_clear(&id);
+                break;
+            }
             default:
                 break;
         }
