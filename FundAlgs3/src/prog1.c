@@ -125,7 +125,7 @@ int main(void) {
             status_t st = convert_to_base_2r(num, r, digits, &res);
             
             if (st == SUCCESS) {
-                printf("Number   d in base 2^%d: %s\n", num, r, res);
+                printf("Number %d in base 2^%d: %s\n", num, r, res);
                 free(res);
             } else {
                 printf("Error: %s\n", status_msg(st));
