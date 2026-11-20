@@ -1,0 +1,9 @@
+Студенты с id 9:
+Petrov Sergey, группа M8O-104, средний балл: 30.00
+Студенты со средним баллом выше общего (57.60):
+Petrov Ivan
+Brown Alice
+Black Chris
+Smirnova Anna
+Doe John
+Green Eva

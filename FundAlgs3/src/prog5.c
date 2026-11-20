@@ -6,7 +6,7 @@
 #include <math.h>
 #include <sys/stat.h>
 
-// 5
+// Задание 5
 
 typedef enum {
     SUCCESS = 0,
@@ -16,16 +16,15 @@ typedef enum {
     ERR_NOT_FOUND,
     ERR_EOF,
     ERR_FILE,
-    ERR_SAME_FILE
+    ERR_SAME_FILE,
+    ERR_DUPLICATE_ID
 } status_t;
 
-// константы 
 enum {
-    GRADES_COUNT = 5,   // количество экзаменов
-    MAX_GRADE = 100     // оценка допустима от 0 до MAX_GRADE
+    GRADES_COUNT = 5,
+    MAX_GRADE = 100
 };
 
-// по какому полю ищем / сортируем
 typedef enum {
     FIELD_ID = 0,
     FIELD_SURNAME,
@@ -45,7 +44,7 @@ typedef struct {
     String name;
     String surname;
     String group;
-    unsigned char *grades;      // динамический массив из GRADES_COUNT оценок
+    unsigned char *grades;
 } Student;
 
 typedef struct {
@@ -56,7 +55,7 @@ typedef struct {
 
 // String (из задания 4)
 
-status_t string_equal(const String *s1, const String *s2, int *result) {
+static status_t string_equal(const String *s1, const String *s2, int *result) {
     if (s1 == NULL || s2 == NULL || result == NULL) return ERR_NULL;
     if (s1->data == NULL || s2->data == NULL) return ERR_VALUE;
 
@@ -64,7 +63,7 @@ status_t string_equal(const String *s1, const String *s2, int *result) {
     return SUCCESS;
 }
 
-status_t string_clear(String *str) {
+static status_t string_clear(String *str) {
     if (str == NULL) return ERR_NULL;
 
     free(str->data);
@@ -74,7 +73,6 @@ status_t string_clear(String *str) {
     return SUCCESS;
 }
 
-// создаёт строку из первых len символов (out должен быть пустым)
 static status_t string_from_range(const char *src, size_t len, String *out) {
     if (src == NULL || out == NULL) return ERR_NULL;
     if (out->data != NULL) return ERR_VALUE;
@@ -95,15 +93,16 @@ static status_t string_from_range(const char *src, size_t len, String *out) {
 
 static const char *status_text(status_t st) {
     switch (st) {
-        case SUCCESS:       return "успешно";
-        case ERR_NULL:      return "пустой указатель";
-        case ERR_MEMORY:    return "не хватает памяти";
-        case ERR_VALUE:     return "некорректное значение";
+        case SUCCESS: return "успешно";
+        case ERR_NULL: return "пустой указатель";
+        case ERR_MEMORY: return "не хватает памяти";
+        case ERR_VALUE: return "некорректное значение";
         case ERR_NOT_FOUND: return "не найдено";
-        case ERR_EOF:       return "конец ввода";
-        case ERR_FILE:      return "ошибка работы с файлом";
+        case ERR_EOF: return "конец ввода";
+        case ERR_FILE: return "ошибка работы с файлом";
         case ERR_SAME_FILE: return "входной и выходной файлы совпадают";
-        default:            return "неизвестная ошибка";
+        case ERR_DUPLICATE_ID: return "id должны быть уникальными";
+        default: return "неизвестная ошибка";
     }
 }
 
@@ -114,7 +113,7 @@ static status_t parse_uint(const char *s, unsigned int *out) {
     unsigned int v = 0;
     for (int i = 0; s[i] != '\0'; i++) {
         if (s[i] < '0' || s[i] > '9') return ERR_VALUE;
-        unsigned int digit = s[i] - '0';
+        unsigned int digit = (unsigned int)(s[i] - '0');
 
         if (v > (UINT_MAX - digit) / 10u) return ERR_VALUE;
         v = v * 10u + digit;
@@ -135,7 +134,6 @@ static status_t parse_grade(const char *s, unsigned char *out) {
     return SUCCESS;
 }
 
-// только латинские буквы, не пустая
 static status_t validate_name(const String *s) {
     if (s == NULL || s->data == NULL) return ERR_NULL;
     if (s->length == 0) return ERR_VALUE;
@@ -147,7 +145,6 @@ static status_t validate_name(const String *s) {
     return SUCCESS;
 }
 
-// любая непустая строка без пробельных символов
 static status_t validate_group(const String *s) {
     if (s == NULL || s->data == NULL) return ERR_NULL;
     if (s->length == 0) return ERR_VALUE;
@@ -159,7 +156,6 @@ static status_t validate_group(const String *s) {
     return SUCCESS;
 }
 
-// сравнение вещественных чисел с эпсилон: result = 1, если a > b
 static status_t is_greater(double a, double b, double eps, int *result) {
     if (result == NULL) return ERR_NULL;
     if (!isfinite(a) || !isfinite(b)) return ERR_VALUE;
@@ -169,7 +165,6 @@ static status_t is_greater(double a, double b, double eps, int *result) {
     return SUCCESS;
 }
 
-// выделяет очередное слово из строки (разделители — пробел и табуляция)
 static status_t next_token(const char **cursor, String *out) {
     if (cursor == NULL || *cursor == NULL || out == NULL) return ERR_NULL;
     if (out->data != NULL) return ERR_VALUE;
@@ -188,7 +183,6 @@ static status_t next_token(const char **cursor, String *out) {
     return SUCCESS;
 }
 
-// остались ли ещё слова в строке
 static int has_more_tokens(const char *cursor) {
     if (cursor == NULL) return 0;
 
@@ -232,7 +226,7 @@ static status_t student_average(const Student *s, double *out) {
     return SUCCESS;
 }
 
-// забирает содержимое student себе (после вызова student пуст)
+// забирает содержимое student себе
 static status_t students_add(StudentList *list, Student *student) {
     if (list == NULL || student == NULL) return ERR_NULL;
 
@@ -252,7 +246,6 @@ static status_t students_add(StudentList *list, Student *student) {
     return SUCCESS;
 }
 
-// разбор одной строки файла: id имя фамилия группа оценка1 ... оценка5
 static status_t parse_student(const char *line, Student *out) {
     if (line == NULL || out == NULL) return ERR_NULL;
 
@@ -295,7 +288,7 @@ static status_t parse_student(const char *line, Student *out) {
     return SUCCESS;
 }
 
-// ввод вывод
+// ввод
 
 static status_t read_line(FILE *in, String *out) {
     if (in == NULL || out == NULL) return ERR_NULL;
@@ -319,7 +312,7 @@ static status_t read_line(FILE *in, String *out) {
         buf[len++] = (char)c;
     }
 
-    if (ferror(in)) { free(buf); return ERR_VALUE; }
+    if (ferror(in)) { free(buf); return ERR_FILE; }
     if (c == EOF && len == 0) { free(buf); return ERR_EOF; }
     while (len > 0 && (buf[len-1]==' ' || buf[len-1]=='\t' || buf[len-1]=='\r')) len--;
     buf[len] = '\0';
@@ -335,7 +328,6 @@ static status_t read_field(const char *prompt, String *out) {
     return read_line(stdin, out);
 }
 
-// проверка, что входной и выходной файлы — не один и тот же файл
 static status_t check_different_files(const char *in_path, const char *out_path) {
     if (in_path == NULL || out_path == NULL) return ERR_NULL;
 
@@ -350,7 +342,14 @@ static status_t check_different_files(const char *in_path, const char *out_path)
     return SUCCESS;
 }
 
-// читает входной файл в список; при ошибке формата возвращает номер строки
+static status_t students_id_taken(const StudentList *list, unsigned int id, int *taken) {
+    if (list == NULL || taken == NULL) return ERR_NULL;
+    *taken = 0;
+    for (size_t i = 0; i < list->count; i++)
+        if (list->items[i].id == id) { *taken = 1; break; }
+    return SUCCESS;
+}
+
 static status_t students_load(const char *path, StudentList *list, size_t *error_line) {
     if (path == NULL || list == NULL || error_line == NULL) return ERR_NULL;
 
@@ -373,10 +372,18 @@ static status_t students_load(const char *path, StudentList *list, size_t *error
             *error_line = line_no;
             reading = 0;
         } else {
-            if (line.length > 0) {      // пустые строки пропускаем
+            if (line.length > 0) {
                 Student s = {0};
                 st = parse_student(line.data, &s);
-                if (st == SUCCESS) st = students_add(list, &s);
+                if (st == SUCCESS) {
+                    int taken = 0;
+                    st = students_id_taken(list, s.id, &taken);
+                    if (st == SUCCESS && taken) st = ERR_DUPLICATE_ID;
+                }
+
+                if (st == SUCCESS) {
+                    st = students_add(list, &s);
+                }
                 student_clear(&s);
 
                 if (st != SUCCESS) {
@@ -388,50 +395,37 @@ static status_t students_load(const char *path, StudentList *list, size_t *error
         }
     }
 
-    fclose(f);
+    if (fclose(f) != 0 && st == SUCCESS) st = ERR_FILE;
     return st;
 }
 
-// создаёт (очищает) выходной файл при старте программы
-static status_t prepare_output(const char *path) {
-    if (path == NULL) return ERR_NULL;
+// поиск
+static status_t students_find(const StudentList *list, field_t field, const String *key, const Student **found, size_t *out_count) {
+    if (list == NULL || key == NULL || key->data == NULL ||
+        found == NULL || out_count == NULL) return ERR_NULL;
 
-    FILE *f = fopen(path, "w");
-    if (f == NULL) return ERR_FILE;
-
-    if (fclose(f) != 0) return ERR_FILE;
-    return SUCCESS;
-}
-
-// поиск (list — буфер на list->count элементов, заполняется указателями)
-
-static status_t students_find_by_id(const StudentList *list, unsigned int id,
-                                    const Student **found, size_t *out_count) {
-    if (list == NULL || found == NULL || out_count == NULL) return ERR_NULL;
-
-    size_t k = 0;
-    for (size_t i = 0; i < list->count; i++)
-        if (list->items[i].id == id) found[k++] = &list->items[i];
-
-    *out_count = k;
-    return (k == 0) ? ERR_NOT_FOUND : SUCCESS;
-}
-
-static status_t students_find_by_text(const StudentList *list, field_t field, const String *key,
-                                      const Student **found, size_t *out_count) {
-    if (list == NULL || key == NULL || found == NULL || out_count == NULL) return ERR_NULL;
-    if (field != FIELD_SURNAME && field != FIELD_NAME && field != FIELD_GROUP) return ERR_VALUE;
+    unsigned int id = 0;
+    if (field == FIELD_ID) {
+        status_t st = parse_uint(key->data, &id);
+        if (st != SUCCESS) return st;
+    } 
+    else if (field != FIELD_SURNAME && field != FIELD_NAME && field != FIELD_GROUP) {
+        return ERR_VALUE;
+    }
 
     size_t k = 0;
     for (size_t i = 0; i < list->count; i++) {
-        const String *value = &list->items[i].surname;
-        if (field == FIELD_NAME) value = &list->items[i].name;
-        else if (field == FIELD_GROUP) value = &list->items[i].group;
+        const Student *s = &list->items[i];
+        int match = 0;
 
-        int equal = 0;
-        status_t st = string_equal(value, key, &equal);
-        if (st != SUCCESS) return st;
-        if (equal) found[k++] = &list->items[i];
+        if (field == FIELD_ID) {
+            match = (s->id == id);
+        } else {
+            const String *value = (field == FIELD_SURNAME) ? &s->surname : (field == FIELD_NAME) ? &s->name : &s->group;
+            status_t st = string_equal(value, key, &match);
+            if (st != SUCCESS) return st;
+        }
+        if (match) found[k++] = s;
     }
 
     *out_count = k;
@@ -475,30 +469,25 @@ static int compare_by_group(const void *a, const void *b) {
     return compare_by_id(a, b);
 }
 
-static status_t get_comparator(field_t field, comparator_t *out) {
-    if (out == NULL) return ERR_NULL;
+// компаратор выбирается по полю и передаётся в qsort
+static status_t students_sort(StudentList *list, field_t field) {
+    if (list == NULL) return ERR_NULL;
 
+    comparator_t cmp;
     switch (field) {
-        case FIELD_ID:      *out = compare_by_id;      break;
-        case FIELD_SURNAME: *out = compare_by_surname; break;
-        case FIELD_NAME:    *out = compare_by_name;    break;
-        case FIELD_GROUP:   *out = compare_by_group;   break;
+        case FIELD_ID:      cmp = compare_by_id;      break;
+        case FIELD_SURNAME: cmp = compare_by_surname; break;
+        case FIELD_NAME:    cmp = compare_by_name;    break;
+        case FIELD_GROUP:   cmp = compare_by_group;   break;
         default: return ERR_VALUE;
     }
-    return SUCCESS;
-}
 
-static status_t students_sort(StudentList *list, comparator_t cmp) {
-    if (list == NULL || cmp == NULL) return ERR_NULL;
-    if (list->count < 2) return SUCCESS;
-
-    qsort(list->items, list->count, sizeof(Student), cmp);
+    if (list->count > 1) qsort(list->items, list->count, sizeof(*list->items), cmp);
     return SUCCESS;
 }
 
 // студенты со средним баллом выше общего среднего балла по всем студентам
-static status_t students_above_average(const StudentList *list, double eps, const Student **found,
-                                       size_t *out_count, double *out_average) {
+static status_t students_above_average(const StudentList *list, double eps, const Student **found, size_t *out_count, double *out_average) {
     if (list == NULL || found == NULL || out_count == NULL || out_average == NULL) return ERR_NULL;
     if (list->count == 0) return ERR_NOT_FOUND;
 
@@ -512,6 +501,7 @@ static status_t students_above_average(const StudentList *list, double eps, cons
     double total_avg = sum / (double)list->count;
 
     size_t k = 0;
+
     for (size_t i = 0; i < list->count; i++) {
         double avg = 0.0;
         status_t st = student_average(&list->items[i], &avg);
@@ -528,49 +518,38 @@ static status_t students_above_average(const StudentList *list, double eps, cons
     return SUCCESS;
 }
 
-// запись в выходной файл (открываем в режиме дозаписи и сразу закрываем)
+// запись в трассировочный файл
 
-static status_t export_student_info(const char *path, unsigned int id,
-                                    const Student **list, size_t count) {
-    if (path == NULL || list == NULL) return ERR_NULL;
+static status_t export_student_info(FILE *f, unsigned int id, const Student **list, size_t count) {
+    if (f == NULL || list == NULL) return ERR_NULL;
 
-    FILE *f = fopen(path, "a");
-    if (f == NULL) return ERR_FILE;
+    if (fprintf(f, "Студенты с id %u:\n", id) < 0) return ERR_FILE;
 
-    status_t st = SUCCESS;
-    if (fprintf(f, "Студенты с id %u:\n", id) < 0) st = ERR_FILE;
-
-    for (size_t i = 0; i < count && st == SUCCESS; i++) {
+    for (size_t i = 0; i < count; i++) {
         double avg = 0.0;
-        st = student_average(list[i], &avg);
-        if (st == SUCCESS &&
-            fprintf(f, "%s %s, группа %s, средний балл: %.2f\n",
+        status_t st = student_average(list[i], &avg);
+        if (st != SUCCESS) return st;
+        if (fprintf(f, "%s %s, группа %s, средний балл: %.2f\n",
                     list[i]->surname.data, list[i]->name.data, list[i]->group.data, avg) < 0)
-            st = ERR_FILE;
+            return ERR_FILE;
     }
 
-    if (fclose(f) != 0 && st == SUCCESS) st = ERR_FILE;
-    return st;
+    if (fflush(f) != 0) return ERR_FILE;
+    return SUCCESS;
 }
 
-static status_t export_above_average(const char *path, const Student **list,
-                                     size_t count, double average) {
-    if (path == NULL || list == NULL) return ERR_NULL;
+static status_t export_above_average(FILE *f, const Student **list, size_t count, double average) {
+    if (f == NULL || list == NULL) return ERR_NULL;
 
-    FILE *f = fopen(path, "a");
-    if (f == NULL) return ERR_FILE;
+    if (fprintf(f, "Студенты со средним баллом выше общего среднего:\n", average) < 0) return ERR_FILE;
+    if (count == 0 && fprintf(f, "(таких студентов нет)\n") < 0) return ERR_FILE;
 
-    status_t st = SUCCESS;
-    if (fprintf(f, "Студенты со средним баллом выше общего (%.2f):\n", average) < 0) st = ERR_FILE;
-
-    if (st == SUCCESS && count == 0 && fprintf(f, "(таких студентов нет)\n") < 0) st = ERR_FILE;
-
-    for (size_t i = 0; i < count && st == SUCCESS; i++) {
-        if (fprintf(f, "%s %s\n", list[i]->surname.data, list[i]->name.data) < 0) st = ERR_FILE;
+    for (size_t i = 0; i < count; i++) {
+        if (fprintf(f, "%s %s\n", list[i]->surname.data, list[i]->name.data) < 0) return ERR_FILE;
     }
 
-    if (fclose(f) != 0 && st == SUCCESS) st = ERR_FILE;
-    return st;
+    if (fflush(f) != 0) return ERR_FILE;
+    return SUCCESS;
 }
 
 // вывод на экран
@@ -602,28 +581,37 @@ static void print_menu(void) {
     fflush(stdout);
 }
 
-// ввод ключа поиска: для id — число, для остальных — строка
-static status_t input_search_key(field_t field, String *key, unsigned int *id) {
-    if (key == NULL || id == NULL) return ERR_NULL;
+// ввод ключа поиска с валидацией
+static status_t input_search_key(field_t field, String *key) {
+    if (key == NULL) return ERR_NULL;
 
-    const char *prompt = "Введите значение: ";
-    if (field == FIELD_ID) prompt = "Введите id: ";
-    else if (field == FIELD_SURNAME) prompt = "Введите фамилию: ";
-    else if (field == FIELD_NAME) prompt = "Введите имя: ";
-    else if (field == FIELD_GROUP) prompt = "Введите группу: ";
+    const char *prompt;
+    switch (field) {
+        case FIELD_ID: prompt = "Введите id: ";      break;
+        case FIELD_SURNAME: prompt = "Введите фамилию: "; break;
+        case FIELD_NAME: prompt = "Введите имя: ";     break;
+        case FIELD_GROUP: prompt = "Введите группу: ";  break;
+        default: return ERR_VALUE;
+    }
 
     status_t st = read_field(prompt, key);
     if (st != SUCCESS) return st;
 
-    if (field == FIELD_ID) {
-        st = parse_uint(key->data, id);
-        if (st == ERR_VALUE) printf("Ошибка: id — целое неотрицательное число\n");
-    } else if (field == FIELD_GROUP) {
-        st = validate_group(key);
-        if (st == ERR_VALUE) printf("Ошибка: группа — непустая строка без пробелов\n");
-    } else {
-        st = validate_name(key);
-        if (st == ERR_VALUE) printf("Ошибка: только латинские буквы, строка не пустая\n");
+    switch (field) {
+        case FIELD_ID: {
+            unsigned int id = 0;
+            st = parse_uint(key->data, &id);
+            if (st == ERR_VALUE) printf("Ошибка: id — целое неотрицательное число\n");
+            break;
+        }
+        case FIELD_GROUP:
+            st = validate_group(key);
+            if (st == ERR_VALUE) printf("Ошибка: группа — непустая строка без пробелов\n");
+            break;
+        default:
+            st = validate_name(key);
+            if (st == ERR_VALUE) printf("Ошибка: только латинские буквы, строка не пустая\n");
+            break;
     }
     return st;
 }
@@ -644,37 +632,46 @@ int main(int argc, char *argv[]) {
     }
 
     status_t st = check_different_files(in_path, out_path);
-    if (st == ERR_SAME_FILE) {
-        fprintf(stderr, "Ошибка: входной и выходной файлы совпадают\n");
-        return 1;
-    } else if (st != SUCCESS) {
-        fprintf(stderr, "Ошибка: не удаётся открыть входной файл '%s' (%s)\n", in_path, status_text(st));
+    if (st != SUCCESS) {
+        if (st == ERR_SAME_FILE)
+            fprintf(stderr, "Ошибка: входной и выходной файлы совпадают\n");
+        else
+            fprintf(stderr, "Ошибка: не удаётся открыть входной файл '%s' (%s)\n",
+                    in_path, status_text(st));
         return 1;
     }
 
     StudentList students = {0};
     size_t error_line = 0;
     st = students_load(in_path, &students, &error_line);
-    switch (st) {
-        case SUCCESS:
-            break;
-        case ERR_FILE:
-            fprintf(stderr, "Ошибка: не удалось прочитать файл '%s'\n", in_path);
-            students_clear(&students);
-            return 1;
-        case ERR_VALUE:
-            fprintf(stderr, "Ошибка: неверный формат данных в строке %zu\n", error_line);
-            students_clear(&students);
-            return 1;
-        default:
-            fprintf(stderr, "Ошибка чтения файла (строка %zu): %s\n", error_line, status_text(st));
-            students_clear(&students);
-            return 1;
+    if (st != SUCCESS) {
+        switch (st) {
+            case ERR_FILE:
+                fprintf(stderr, "Ошибка: не удалось прочитать файл '%s'\n", in_path);
+                break;
+            case ERR_VALUE:
+                fprintf(stderr, "Ошибка: неверный формат данных в строке %zu\n", error_line);
+                break;
+            default:
+                fprintf(stderr, "Ошибка чтения файла (строка %zu): %s\n",
+                        error_line, status_text(st));
+                break;
+        }
+        students_clear(&students);
+        return 1;
     }
 
-    st = prepare_output(out_path);
-    if (st != SUCCESS) {
+    FILE *trace = fopen(out_path, "w");
+    if (trace == NULL) {
         fprintf(stderr, "Ошибка: не удалось создать выходной файл '%s'\n", out_path);
+        students_clear(&students);
+        return 1;
+    }
+
+    const Student **found = malloc((students.count ? students.count : 1) * sizeof *found);
+    if (found == NULL) {
+        fprintf(stderr, "Ошибка: %s\n", status_text(ERR_MEMORY));
+        fclose(trace);
         students_clear(&students);
         return 1;
     }
@@ -684,6 +681,7 @@ int main(int argc, char *argv[]) {
     int running = 1;
     while (running) {
         print_menu();
+
         String line = {0};
         st = read_line(stdin, &line);
         if (st != SUCCESS) {
@@ -691,13 +689,14 @@ int main(int argc, char *argv[]) {
             if (st != ERR_EOF) fprintf(stderr, "Ошибка ввода (%s)\n", status_text(st));
             break;
         }
+
         unsigned int choice = 0;
-        if (parse_uint(line.data, &choice) != SUCCESS || choice > 11) {
+        status_t parse_st = parse_uint(line.data, &choice);
+        string_clear(&line);
+        if (parse_st != SUCCESS || choice > 11) {
             printf("Неверный пункт меню\n");
-            string_clear(&line);
             continue;
         }
-        string_clear(&line);
 
         if (choice != 0 && students.count == 0) {
             printf("Список студентов пуст\n");
@@ -708,114 +707,102 @@ int main(int argc, char *argv[]) {
             case 0:
                 running = 0;
                 break;
-            case 1: {
+
+            case 1:
                 for (size_t i = 0; i < students.count; i++) print_student(&students.items[i]);
                 break;
-            }
+
             case 2: case 3: case 4: case 5: {
                 field_t field = (field_t)(choice - 2);
                 String key = {0};
-                unsigned int id = 0;
                 size_t n = 0;
 
-                st = input_search_key(field, &key, &id);
+                st = input_search_key(field, &key);
+                if (st == SUCCESS) st = students_find(&students, field, &key, found, &n);
                 if (st == SUCCESS) {
-                    const Student **found = malloc(students.count * sizeof(*found));
-                    if (found == NULL) {
-                        st = ERR_MEMORY;
-                    } else {
-                        if (field == FIELD_ID) st = students_find_by_id(&students, id, found, &n);
-                        else st = students_find_by_text(&students, field, &key, found, &n);
-
-                        if (st == SUCCESS) {
-                            printf("Найдено студентов: %zu\n", n);
-                            for (size_t i = 0; i < n; i++) print_student(found[i]);
-                        }
-                        free(found);
-                    }
+                    printf("Найдено студентов: %zu\n", n);
+                    for (size_t i = 0; i < n; i++) print_student(found[i]);
                 }
                 string_clear(&key);
 
-                if (st == SUCCESS) { }
-                else if (st == ERR_NOT_FOUND) printf("Студенты не найдены\n");
-                else if (st == ERR_VALUE) { }
-                else if (st == ERR_EOF) running = 0;
-                else {
-                    printf("Ошибка (%s)\n", status_text(st));
-                    if (st == ERR_MEMORY) running = 0;
+                switch (st) {
+                    case SUCCESS: break;
+                    case ERR_NOT_FOUND: printf("Студенты не найдены\n"); break;
+                    case ERR_VALUE: break;
+                    case ERR_EOF: running = 0; break;
+                    default:
+                        printf("Ошибка (%s)\n", status_text(st));
+                        if (st == ERR_MEMORY) running = 0;
+                        break;
                 }
                 break;
             }
+
             case 6: case 7: case 8: case 9: {
-                field_t field = (field_t)(choice - 6);
-                comparator_t cmp = NULL;
-
-                st = get_comparator(field, &cmp);
-                if (st == SUCCESS) st = students_sort(&students, cmp);
-
+                st = students_sort(&students, (field_t)(choice - 6));
                 if (st == SUCCESS) printf("Список отсортирован (посмотреть — пункт 1)\n");
                 else printf("Ошибка сортировки (%s)\n", status_text(st));
                 break;
             }
+
             case 10: {
-                String s = {0};
+                String key = {0};
+                size_t n = 0;
                 unsigned int id = 0;
 
-                st = read_field("Введите id: ", &s);
+                st = input_search_key(FIELD_ID, &key);
+                if (st == SUCCESS) st = students_find(&students, FIELD_ID, &key, found, &n);
                 if (st == SUCCESS) {
-                    st = parse_uint(s.data, &id);
-                    if (st == ERR_VALUE) printf("Ошибка: id — целое неотрицательное число\n");
+                    st = parse_uint(key.data, &id);
+                    if (st == SUCCESS) st = export_student_info(trace, id, found, n);
                 }
-                string_clear(&s);
+                string_clear(&key);
 
-                if (st == SUCCESS) {
-                    const Student **found = malloc(students.count * sizeof(*found));
-                    if (found == NULL) {
-                        st = ERR_MEMORY;
-                    } else {
-                        size_t n = 0;
-                        st = students_find_by_id(&students, id, found, &n);
-                        if (st == SUCCESS) st = export_student_info(out_path, id, found, n);
-                        free(found);
-                    }
-                }
-
-                if (st == SUCCESS) printf("Данные записаны в файл '%s'\n", out_path);
-                else if (st == ERR_NOT_FOUND) printf("Студент с таким id не найден\n");
-                else if (st == ERR_VALUE) { }
-                else if (st == ERR_EOF) running = 0;
-                else {
-                    printf("Ошибка (%s)\n", status_text(st));
-                    if (st == ERR_MEMORY) running = 0;
+                switch (st) {
+                    case SUCCESS:
+                        printf("Данные студента записаны в файл\n", out_path);
+                        break;
+                    case ERR_NOT_FOUND: printf("Студент с таким id не найден\n"); break;
+                    case ERR_VALUE: break;
+                    case ERR_EOF: running = 0; break;
+                    default:
+                        printf("Ошибка (%s)\n", status_text(st));
+                        if (st == ERR_MEMORY) running = 0;
+                        break;
                 }
                 break;
             }
-            case 11: {
-                const Student **found = malloc(students.count * sizeof(*found));
-                if (found == NULL) {
-                    printf("Ошибка (%s)\n", status_text(ERR_MEMORY));
-                    running = 0;
-                    break;
-                }
 
+            case 11: {
                 size_t n = 0;
                 double average = 0.0;
-                st = students_above_average(&students, eps, found, &n, &average);
-                if (st == SUCCESS) st = export_above_average(out_path, found, n, average);
-                free(found);
 
-                if (st == SUCCESS) printf("Записано студентов: %zu (файл '%s')\n", n, out_path);
-                else {
-                    printf("Ошибка (%s)\n", status_text(st));
-                    if (st == ERR_MEMORY) running = 0;
+                st = students_above_average(&students, eps, found, &n, &average);
+                if (st == SUCCESS) st = export_above_average(trace, found, n, average);
+
+                switch (st) {
+                    case SUCCESS:
+                        printf("Записано студентов: %zu\n", n);
+                        break;
+                    case ERR_NOT_FOUND:
+                        printf("Список студентов пуст\n");
+                        break;
+                    default:
+                        printf("Ошибка (%s)\n", status_text(st));
+                        if (st == ERR_MEMORY) running = 0;
+                        break;
                 }
                 break;
             }
+
             default:
                 break;
         }
     }
 
+    free(found);
+    if (fclose(trace) != 0)
+        fprintf(stderr, "Предупреждение: ошибка закрытия файла трассировки\n");
     students_clear(&students);
     printf("Программа завершена.\n");
     return 0;

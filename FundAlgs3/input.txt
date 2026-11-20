@@ -1,0 +1,10 @@
+3 Ivan Petrov M8O-101 90 80 70 60 50
+1 Anna Smirnova M8O-102 100 100 100 100 100
+4 Olga Ivanova M8O-101 40 40 40 40 40
+2 John Doe M8O-103 60 60 60 60 60
+5 Alice Brown M8O-101 75 85 95 65 55
+6 Bob Smith M8O-102 20 30 40 50 60
+007 Eva Green M8O-103 88 92 76 84 90
+8 Chris Black M8O-101 55 65 75 85 95
+9 Sergey Petrov M8O-104 10 20 30 40 50
+0 Ivan White M8O-104 0 0 0 0 0
