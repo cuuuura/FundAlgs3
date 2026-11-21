@@ -541,7 +541,7 @@ static status_t export_student_info(FILE *f, unsigned int id, const Student **li
 static status_t export_above_average(FILE *f, const Student **list, size_t count, double average) {
     if (f == NULL || list == NULL) return ERR_NULL;
 
-    if (fprintf(f, "Студенты со средним баллом выше общего среднего:\n", average) < 0) return ERR_FILE;
+    if (fprintf(f, "Студенты со средним баллом выше общего среднего (%.2f):\n", average) < 0) return ERR_FILE;
     if (count == 0 && fprintf(f, "(таких студентов нет)\n") < 0) return ERR_FILE;
 
     for (size_t i = 0; i < count; i++) {
@@ -636,8 +636,7 @@ int main(int argc, char *argv[]) {
         if (st == ERR_SAME_FILE)
             fprintf(stderr, "Ошибка: входной и выходной файлы совпадают\n");
         else
-            fprintf(stderr, "Ошибка: не удаётся открыть входной файл '%s' (%s)\n",
-                    in_path, status_text(st));
+            fprintf(stderr, "Ошибка: не удаётся открыть входной файл '%s' (%s)\n", in_path, status_text(st));
         return 1;
     }
 
@@ -760,7 +759,7 @@ int main(int argc, char *argv[]) {
 
                 switch (st) {
                     case SUCCESS:
-                        printf("Данные студента записаны в файл\n", out_path);
+                        printf("Данные студента записаны в файл\n");
                         break;
                     case ERR_NOT_FOUND: printf("Студент с таким id не найден\n"); break;
                     case ERR_VALUE: break;
